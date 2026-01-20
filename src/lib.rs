@@ -76,23 +76,28 @@ pub fn receive_command(stream: &mut TcpStream) -> Result<Command, Box<dyn Error>
     let mut bytes = [0; MAX_MESSAGE_SIZE];
     let bytes_read = stream.read(&mut bytes)?;
     let message: String = str::from_utf8(&bytes[..bytes_read])?.to_owned();
-    let command = match message.split("|").next().unwrap() {
+
+    // command|...
+    let fields: Vec<&str> = message.split("|").collect();
+    let command_id = fields.first().ok_or(CommandParseError)?;
+
+    let command = match *command_id {
         "Msg" => {
-            let fields: Vec<&str> = message.split("|").collect();
+            // Msg|sender|receiver|message
+            if fields.len() < 4 {
+                return Err(Box::new(CommandParseError));
+            }
             Command::Msg(Message {
-                sender: fields.get(1).unwrap().to_string(),
-                receiver: fields.get(2).unwrap().to_string(),
-                message: fields.get(3).unwrap().to_string(),
+                sender: fields[1].to_string(),
+                receiver: fields[2].to_string(),
+                message: fields[3].to_string(),
             })
         }
-        "Connect" => Command::Connect(User::new(
-            message
-                .split("|")
-                .collect::<Vec<&str>>()
-                .get(1)
-                .unwrap()
-                .to_string(),
-        )),
+        "Connect" => {
+            // Connect|username
+            let username = fields.get(1).ok_or(CommandParseError)?;
+            Command::Connect(User::new(username.to_string()))
+        }
         _ => {
             return Err(Box::new(CommandParseError));
         }
